@@ -1,0 +1,28 @@
+{
+	"schemaVersion": 1,
+	"id": "aichan-fabric",
+	"version": "${version}",
+	"name": "AiChan-fabric",
+	"description": "Fabric mod to connect Minecraft server to QQ AiChan bot.",
+	"authors": [
+		"YFshadaow"
+	],
+	"contact": {
+		"homepage": "https://fabricmc.net/",
+		"sources": "https://github.com/KaituoDev/AiChan-fabric"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/aichan-fabric/icon.png",
+	"environment": "server",
+	"entrypoints": {
+		"server": [
+			"fun.kaituo.aichanfabric.AiChanfabric"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=0.15.11",
+		"minecraft": ">=1.21 <=1.21.1",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}
