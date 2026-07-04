@@ -4,8 +4,8 @@ import com.google.gson.Gson;
 import fun.kaituo.aichanfabric.AiChanfabric;
 import fun.kaituo.aichanfabric.AiChanConfig;
 import fun.kaituo.aichanfabric.Utils;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.Text;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.network.chat.Component;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
 
@@ -90,7 +90,7 @@ public class AiChanClient extends WebSocketClient {
                 }
                 String message = Utils.fixMinecraftColor(packet.get(1));
                 // 回到主线程广播
-                plugin.getServer().execute(() -> plugin.getServer().getPlayerManager().broadcast(Text.literal(message), false));
+                plugin.getServer().executeIfPossible(() -> plugin.getServer().getPlayerList().broadcastSystemMessage(Component.literal(message), false));
             }
             case BOT_LIST_REQUEST_TO_SERVER -> {
                 SocketPacket listPacket = new SocketPacket(SocketPacket.PacketType.SERVER_COMMAND_FEEDBACK_TO_BOT);
@@ -98,13 +98,13 @@ public class AiChanClient extends WebSocketClient {
                 listPacket.add(0, contextJson);
 
                 // 回到主线程获取玩家列表（Fabric线程安全要求）
-                plugin.getServer().execute(() -> {
-                    List<ServerPlayerEntity> players = plugin.getServer().getPlayerManager().getPlayerList();
+                plugin.getServer().executeIfPossible(() -> {
+                    List<ServerPlayer> players = plugin.getServer().getPlayerList().getPlayers();
                     if (players.isEmpty()) {
                         listPacket.add(1, String.format("%s无人在线", this.serverName));
                     } else {
                         StringJoiner listMessage = new StringJoiner(", ");
-                        for (ServerPlayerEntity player : players) {
+                        for (ServerPlayer player : players) {
                             listMessage.add(player.getName().getString());
                         }
                         listPacket.add(1, String.format("%s有 %d 人在线: %s", this.serverName, players.size(), listMessage));

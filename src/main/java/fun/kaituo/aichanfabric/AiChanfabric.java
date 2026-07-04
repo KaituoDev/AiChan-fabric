@@ -7,9 +7,10 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.command.CommandOutput;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.text.Text;
+import net.minecraft.commands.CommandSource;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.permissions.PermissionSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,7 +65,7 @@ public class AiChanfabric implements DedicatedServerModInitializer {
 		// 监听聊天事件
 		ServerMessageEvents.CHAT_MESSAGE.register((message, sender, params) -> {
 			SocketPacket packet = new SocketPacket(SocketPacket.PacketType.SERVER_CHAT_TO_BOT);
-			String msg = String.format("%s: %s", sender.getName().getString(), message.getContent().getString());
+			String msg = String.format("%s: %s", sender.getName().getString(), message.signedContent());
 			msg = Utils.fixMinecraftColor(msg);
 			packet.add(0, config.trigger);
 			packet.add(1, config.server_prefix + " " + msg);
@@ -90,11 +91,10 @@ public class AiChanfabric implements DedicatedServerModInitializer {
 
 	public void executeBotCommand(String cmd, String contextJson) {
 		// 确保在主线程执行指令
-		server.execute(() -> {
-			// Fabric 的黑魔法：创建一个拦截输出的 CommandOutput
-			CommandOutput output = new CommandOutput() {
+		server.executeIfPossible(() -> {
+			CommandSource output = new CommandSource() {
 				@Override
-				public void sendMessage(Text message) {
+				public void sendSystemMessage(Component message) {
 					SocketPacket packet = new SocketPacket(SocketPacket.PacketType.SERVER_COMMAND_FEEDBACK_TO_BOT);
 					String plainText = message.getString();
 					packet.add(0, contextJson);
@@ -103,19 +103,18 @@ public class AiChanfabric implements DedicatedServerModInitializer {
 				}
 
 				@Override
-				public boolean shouldReceiveFeedback() { return true; }
+				public boolean acceptsSuccess() { return true; }
 				@Override
-				public boolean shouldTrackOutput() { return true; }
+				public boolean acceptsFailure() { return true; }
 				@Override
-				public boolean shouldBroadcastConsoleToOps() { return false; }
+				public boolean shouldInformAdmins() { return false; }
 			};
 
-			// 使用包装后的 Output 构造执行者，强制以最高权限(4级)静默运行
-			ServerCommandSource customSource = server.getCommandSource()
-					.withOutput(output)
-					.withLevel(4);
+			CommandSourceStack customSource = server.createCommandSourceStack()
+					.withSource(output)
+					.withMaximumPermission(PermissionSet.ALL_PERMISSIONS);
 
-			server.getCommandManager().executeWithPrefix(customSource, cmd);
+			server.getCommands().performPrefixedCommand(customSource, cmd);
 		});
 	}
 
