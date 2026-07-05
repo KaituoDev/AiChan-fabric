@@ -118,6 +118,34 @@ public class AiChanClient extends WebSocketClient {
                     plugin.executeBotCommand(packet.get(2), contextJson); // 内部已做线程同步
                 }
             }
+            case BOT_PLAYER_LOOKUP_RESULT_TO_SERVER -> {
+                AiChanConfig config = plugin.getConfig();
+                if (!config.enable_whitelist) {
+                    break;
+                }
+                String mcId = packet.get(0);
+                String sessionId = packet.get(1);
+                boolean isAuthorized = Boolean.parseBoolean(packet.get(2));
+                boolean isBanned = Boolean.parseBoolean(packet.get(3));
+
+                if (isBanned) {
+                    plugin.rejectLogin(sessionId, config.banned_message);
+                } else if (!isAuthorized) {
+                    plugin.rejectLogin(sessionId, config.not_whitelisted_message);
+                } else {
+                    plugin.acceptLogin(sessionId);
+                }
+            }
+            case BOT_PLAYER_BAN_TO_SERVER -> {
+                AiChanConfig config = plugin.getConfig();
+                if (!config.enable_whitelist) {
+                    break;
+                }
+                String mcId = packet.get(0);
+                plugin.getServer().executeIfPossible(() ->
+                    plugin.kickPlayerIfOnline(mcId, config.banned_message)
+                );
+            }
         }
     }
 
