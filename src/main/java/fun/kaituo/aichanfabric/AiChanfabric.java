@@ -2,11 +2,14 @@ package fun.kaituo.aichanfabric;
 
 import fun.kaituo.aichanfabric.client.AiChanClient;
 import fun.kaituo.aichanfabric.client.SocketPacket;
+import fun.kaituo.aichanfabric.mixin.ServerLoginNetworkHandlerAccessor;
 import net.fabricmc.api.DedicatedServerModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerLoginConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.network.ServerLoginNetworkHandler;
 import net.minecraft.server.command.CommandOutput;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.text.Text;
@@ -15,6 +18,12 @@ import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class AiChanfabric implements DedicatedServerModInitializer {
 
@@ -23,6 +32,11 @@ public class AiChanfabric implements DedicatedServerModInitializer {
 	private AiChanClient client;
 	private AiChanConfig config;
 	private MinecraftServer server;
+	private final ConcurrentHashMap<String, ServerLoginNetworkHandler> pendingLogins = new ConcurrentHashMap<>();
+	private final ConcurrentHashMap<String, CompletableFuture<Void>> loginFutures = new ConcurrentHashMap<>();
+	private final ConcurrentHashMap<ServerLoginNetworkHandler, String> sessionIds = new ConcurrentHashMap<>();
+	private final AtomicLong sessionCounter = new AtomicLong(0);
+	private ScheduledExecutorService whitelistScheduler;
 
 	@Override
 	public void onInitializeServer() {
@@ -35,7 +49,10 @@ public class AiChanfabric implements DedicatedServerModInitializer {
 		}
 
 		// 获取 Server 实例
-		ServerLifecycleEvents.SERVER_STARTING.register(server -> this.server = server);
+		ServerLifecycleEvents.SERVER_STARTING.register(server -> {
+			this.server = server;
+			this.whitelistScheduler = Executors.newSingleThreadScheduledExecutor();
+		});
 
 		// 服务器启动后连接 WebSocket
 		ServerLifecycleEvents.SERVER_STARTED.register(server -> {
@@ -54,10 +71,14 @@ public class AiChanfabric implements DedicatedServerModInitializer {
 				this.client.close();
 				this.client.shutdownScheduler();
 			}
+			if (this.whitelistScheduler != null) {
+				this.whitelistScheduler.shutdown();
+			}
 			LOGGER.info("AiChanFabric 已卸载！");
 		});
 
 		registerEvents();
+		registerWhitelistEvents();
 	}
 
 	private void registerEvents() {
@@ -116,6 +137,79 @@ public class AiChanfabric implements DedicatedServerModInitializer {
 					.withLevel(4);
 
 			server.getCommandManager().executeWithPrefix(customSource, cmd);
+		});
+	}
+
+	public void kickPlayerIfOnline(String name, String message) {
+		if (server.getPlayerManager().getPlayer(name) == null) {
+			return;
+		}
+		server.getCommandManager().executeWithPrefix(
+			server.getCommandSource().withLevel(4),
+			"kick " + name + " " + message
+		);
+	}
+
+	public boolean rejectLogin(String sessionId, String message) {
+		ServerLoginNetworkHandler handler = pendingLogins.remove(sessionId);
+		CompletableFuture<Void> future = loginFutures.remove(sessionId);
+		if (handler != null) {
+			handler.disconnect(Text.literal(message));
+			sessionIds.remove(handler);
+		}
+		if (future != null) {
+			future.complete(null);
+		}
+		return handler != null;
+	}
+
+	public void acceptLogin(String sessionId) {
+		ServerLoginNetworkHandler handler = pendingLogins.remove(sessionId);
+		CompletableFuture<Void> future = loginFutures.remove(sessionId);
+		if (handler != null) {
+			sessionIds.remove(handler);
+		}
+		if (future != null) {
+			future.complete(null);
+		}
+	}
+
+	private void registerWhitelistEvents() {
+		if (!config.enable_whitelist) {
+			return;
+		}
+
+		ServerLoginConnectionEvents.QUERY_START.register((handler, server, sender, synchronizer) -> {
+			String name = ((ServerLoginNetworkHandlerAccessor) handler).getProfileName().toLowerCase();
+			String sessionId = String.valueOf(sessionCounter.incrementAndGet());
+
+			CompletableFuture<Void> future = new CompletableFuture<>();
+			synchronizer.waitFor(future);
+
+			pendingLogins.put(sessionId, handler);
+			loginFutures.put(sessionId, future);
+			sessionIds.put(handler, sessionId);
+
+			SocketPacket packet = new SocketPacket(SocketPacket.PacketType.SERVER_PLAYER_LOOKUP_REQUEST_TO_BOT);
+			packet.add(0, name);
+			packet.add(1, sessionId);
+			client.sendPacket(packet);
+
+			whitelistScheduler.schedule(
+					() -> server.execute(() -> rejectLogin(sessionId, config.timeout_message)),
+					config.whitelist_timeout, TimeUnit.SECONDS
+			);
+		});
+
+		ServerLoginConnectionEvents.DISCONNECT.register((handler, server) -> {
+			String sessionId = sessionIds.remove(handler);
+			if (sessionId != null) {
+				pendingLogins.remove(sessionId);
+				CompletableFuture<Void> future = loginFutures.remove(sessionId);
+				if (future != null) {
+					future.complete(null);
+				}
+			}
 		});
 	}
 

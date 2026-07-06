@@ -1,0 +1,11 @@
+{
+  "required": true,
+  "package": "fun.kaituo.aichanfabric.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "server": [
+    "ServerLoginNetworkHandlerAccessor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

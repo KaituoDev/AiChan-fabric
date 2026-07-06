@@ -23,6 +23,11 @@ public class AiChanConfig {
     public String trigger = "f";
     public String broadcast_trigger = "all";
     public String fernet_key = "YOUR_FERNET_KEY_HERE";
+    public boolean enable_whitelist = false;
+    public int whitelist_timeout = 1;
+    public String not_whitelisted_message = "请加QQ群 594048732 自助获取白名单！";
+    public String banned_message = "你已被封禁！请加QQ群 594048732 咨询解封！";
+    public String timeout_message = "白名单认证超时，请稍后重试！";
     public boolean notify_on_join_and_quit = true;
     public int heart_beat_interval = 900;
 
