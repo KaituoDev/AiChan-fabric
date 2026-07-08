@@ -88,6 +88,10 @@ public class AiChanClient extends WebSocketClient {
                 if (packet.get(0).equals(this.trigger)) {
                     break;
                 }
+                AiChanConfig config = plugin.getConfig();
+                if (!config.sync_chat) {
+                    break;
+                }
                 String message = Utils.fixMinecraftColor(packet.get(1));
                 // 回到主线程广播
                 plugin.getServer().executeIfPossible(() -> plugin.getServer().getPlayerList().broadcastSystemMessage(Component.literal(message), false));

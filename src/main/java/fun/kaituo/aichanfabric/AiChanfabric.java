@@ -85,14 +85,16 @@ public class AiChanfabric implements DedicatedServerModInitializer {
 
 	private void registerEvents() {
 		// 监听聊天事件
-		ServerMessageEvents.CHAT_MESSAGE.register((message, sender, params) -> {
-			SocketPacket packet = new SocketPacket(SocketPacket.PacketType.SERVER_CHAT_TO_BOT);
-			String msg = String.format("%s: %s", sender.getName().getString(), message.signedContent());
-			msg = Utils.fixMinecraftColor(msg);
-			packet.add(0, config.trigger);
-			packet.add(1, config.server_prefix + " " + msg);
-			this.client.sendPacket(packet);
-		});
+		if (config.sync_chat) {
+			ServerMessageEvents.CHAT_MESSAGE.register((message, sender, params) -> {
+				SocketPacket packet = new SocketPacket(SocketPacket.PacketType.SERVER_CHAT_TO_BOT);
+				String msg = String.format("%s: %s", sender.getName().getString(), message.signedContent());
+				msg = Utils.fixMinecraftColor(msg);
+				packet.add(0, config.trigger);
+				packet.add(1, config.server_prefix + " " + msg);
+				this.client.sendPacket(packet);
+			});
+		}
 
 		// 监听进退服事件
 		if (config.notify_on_join_and_quit) {

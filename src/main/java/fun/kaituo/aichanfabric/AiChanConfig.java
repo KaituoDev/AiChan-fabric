@@ -29,6 +29,7 @@ public class AiChanConfig {
     public String banned_message = "§c你已被封禁！请加QQ群 594048732 咨询解封！";
     public String timeout_message = "§c白名单认证超时，请稍后重试！";
     public boolean notify_on_join_and_quit = true;
+    public boolean sync_chat = true;
     public int heart_beat_interval = 900;
 
     public static AiChanConfig load() {
